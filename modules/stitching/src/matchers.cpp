@@ -148,7 +148,7 @@ void CpuMatcher::match(const ImageFeatures &features1, const ImageFeatures &feat
     CV_Assert(features2.descriptors.depth() == CV_8U || features2.descriptors.depth() == CV_32F);
 
 #ifdef HAVE_TEGRA_OPTIMIZATION
-    if (tegra::match2nearest(features1, features2, matches_info, match_conf_))
+    if (tegra::useTegra() && tegra::match2nearest(features1, features2, matches_info, match_conf_))
         return;
 #endif
 
@@ -220,7 +220,11 @@ void GpuMatcher::match(const ImageFeatures &features1, const ImageFeatures &feat
     descriptors1_.upload(features1.descriptors);
     descriptors2_.upload(features2.descriptors);
 
-    Ptr<cuda::DescriptorMatcher> matcher = cuda::DescriptorMatcher::createBFMatcher(NORM_L2);
+    //TODO: NORM_L1 allows to avoid matcher crashes for ORB features, but is not absolutely correct for them.
+    //      The best choice for ORB features is NORM_HAMMING, but it is incorrect for SURF features.
+    //      More accurate fix in this place should be done in the future -- the type of the norm
+    //      should be either a parameter of this method, or a field of the class.
+    Ptr<cuda::DescriptorMatcher> matcher = cuda::DescriptorMatcher::createBFMatcher(NORM_L1);
 
     MatchesSet matches;
 

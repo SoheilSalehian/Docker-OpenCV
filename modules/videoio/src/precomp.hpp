@@ -49,6 +49,7 @@
 
 #include "opencv2/imgcodecs.hpp"
 
+#include "opencv2/imgproc.hpp"
 #include "opencv2/imgproc/imgproc_c.h"
 #include "opencv2/imgcodecs/imgcodecs_c.h"
 #include "opencv2/videoio/videoio_c.h"
@@ -101,6 +102,7 @@ struct CvVideoWriter
 };
 
 CvCapture * cvCreateCameraCapture_V4L( int index );
+CvCapture * cvCreateCameraCapture_V4L( const char* deviceName );
 CvCapture * cvCreateCameraCapture_DC1394( int index );
 CvCapture * cvCreateCameraCapture_DC1394_2( int index );
 CvCapture* cvCreateCameraCapture_MIL( int index );
@@ -120,6 +122,7 @@ CvCapture* cvCreateFileCapture_MSMF (const char* filename);
 CvVideoWriter* cvCreateVideoWriter_MSMF( const char* filename, int fourcc,
                                         double fps, CvSize frameSize, int is_color );
 CvCapture* cvCreateCameraCapture_OpenNI( int index );
+CvCapture* cvCreateCameraCapture_OpenNI2( int index );
 CvCapture* cvCreateFileCapture_OpenNI( const char* filename );
 CvCapture* cvCreateCameraCapture_Android( int index );
 CvCapture* cvCreateCameraCapture_XIMEA( int index );
@@ -166,11 +169,29 @@ namespace cv
     public:
         virtual ~IVideoCapture() {}
         virtual double getProperty(int) const { return 0; }
-        virtual bool setProperty(int, double) { return 0; }
+        virtual bool setProperty(int, double) { return false; }
         virtual bool grabFrame() = 0;
-        virtual bool retrieveFrame(int, cv::OutputArray) = 0;
+        virtual bool retrieveFrame(int, OutputArray) = 0;
+        virtual bool isOpened() const = 0;
         virtual int getCaptureDomain() { return CAP_ANY; } // Return the type of the capture object: CAP_VFW, etc...
     };
+
+    class IVideoWriter
+    {
+    public:
+        virtual ~IVideoWriter() {}
+        virtual double getProperty(int) const { return 0; }
+        virtual bool setProperty(int, double) { return false; }
+
+        virtual bool isOpened() const = 0;
+        virtual void write(InputArray) = 0;
+    };
+
+    Ptr<IVideoCapture> createMotionJpegCapture(const String& filename);
+    Ptr<IVideoWriter> createMotionJpegWriter( const String& filename, double fps, Size frameSize, bool iscolor );
+
+    Ptr<IVideoCapture> createGPhoto2Capture(int index);
+    Ptr<IVideoCapture> createGPhoto2Capture(const String& deviceName);
 };
 
 #endif /* __VIDEOIO_H_ */

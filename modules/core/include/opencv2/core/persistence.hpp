@@ -89,6 +89,8 @@ the extension of the opened file, ".xml" for XML files and ".yml" or ".yaml" for
  */
 typedef struct CvFileStorage CvFileStorage;
 typedef struct CvFileNode CvFileNode;
+typedef struct CvMat CvMat;
+typedef struct CvMatND CvMatND;
 
 //! @} core_c
 
@@ -257,7 +259,7 @@ Here is how to read the file created by the code sample above:
             cout << " " << (int)lbpval[i];
         cout << ")" << endl;
     }
-    fs.release();
+    fs2.release();
 @endcode
 
 Format specification    {#format_spec}
@@ -398,7 +400,7 @@ public:
     FileNode operator[](const String& nodename) const;
 
     /** @overload */
-    CV_WRAP FileNode operator[](const char* nodename) const;
+    CV_WRAP_AS(getNode) FileNode operator[](const char* nodename) const;
 
     /** @brief Returns the obsolete C FileStorage structure.
     @returns Pointer to the underlying C FileStorage structure
@@ -424,6 +426,27 @@ public:
     @see ocvWrite for details.
      */
     void writeObj( const String& name, const void* obj );
+
+    /**
+     * @brief Simplified writing API to use with bindings.
+     * @param name Name of the written object
+     * @param val Value of the written object
+     */
+    CV_WRAP void write(const String& name, double val);
+    /// @overload
+    CV_WRAP void write(const String& name, const String& val);
+    /// @overload
+    CV_WRAP void write(const String& name, InputArray val);
+
+    /** @brief Writes a comment.
+
+    The function writes a comment into file storage. The comments are skipped when the storage is read.
+    @param comment The written comment, single-line or multi-line
+    @param append If true, the function tries to put the comment at the end of current line.
+    Else if the comment is multi-line, or if it does not fit at the end of the current
+    line, the comment starts a new line.
+     */
+    CV_WRAP void writeComment(const String& comment, bool append = false);
 
     /** @brief Returns the normalized object name for the specified name of a file.
     @param filename Name of a file
@@ -499,12 +522,12 @@ public:
     /** @overload
     @param nodename Name of an element in the mapping node.
     */
-    CV_WRAP FileNode operator[](const char* nodename) const;
+    CV_WRAP_AS(getNode) FileNode operator[](const char* nodename) const;
 
     /** @overload
     @param i Index of an element in the sequence node.
     */
-    CV_WRAP FileNode operator[](int i) const;
+    CV_WRAP_AS(at) FileNode operator[](int i) const;
 
     /** @brief Returns type of the node.
     @returns Type of the node. See FileNode::Type
@@ -565,6 +588,13 @@ public:
 
     //! reads the registered object and returns pointer to it
     void* readObj() const;
+
+    //! Simplified reading API to use with bindings.
+    CV_WRAP double real() const;
+    //! Simplified reading API to use with bindings.
+    CV_WRAP String string() const;
+    //! Simplified reading API to use with bindings.
+    CV_WRAP Mat mat() const;
 
     // do not use wrapper pointer classes for better efficiency
     const CvFileStorage* fs;
@@ -660,6 +690,7 @@ CV_EXPORTS void write( FileStorage& fs, const String& name, const String& value 
 CV_EXPORTS void write( FileStorage& fs, const String& name, const Mat& value );
 CV_EXPORTS void write( FileStorage& fs, const String& name, const SparseMat& value );
 CV_EXPORTS void write( FileStorage& fs, const String& name, const std::vector<KeyPoint>& value);
+CV_EXPORTS void write( FileStorage& fs, const String& name, const std::vector<DMatch>& value);
 
 CV_EXPORTS void writeScalar( FileStorage& fs, int value );
 CV_EXPORTS void writeScalar( FileStorage& fs, float value );
@@ -678,6 +709,7 @@ CV_EXPORTS void read(const FileNode& node, String& value, const String& default_
 CV_EXPORTS void read(const FileNode& node, Mat& mat, const Mat& default_mat = Mat() );
 CV_EXPORTS void read(const FileNode& node, SparseMat& mat, const SparseMat& default_mat = SparseMat() );
 CV_EXPORTS void read(const FileNode& node, std::vector<KeyPoint>& keypoints);
+CV_EXPORTS void read(const FileNode& node, std::vector<DMatch>& matches);
 
 template<typename _Tp> static inline void read(const FileNode& node, Point_<_Tp>& value, const Point_<_Tp>& default_value)
 {
@@ -914,7 +946,7 @@ void write(FileStorage& fs, const Range& r )
 template<typename _Tp> static inline
 void write( FileStorage& fs, const std::vector<_Tp>& vec )
 {
-    internal::VecWriterProxy<_Tp, DataType<_Tp>::fmt != 0> w(&fs);
+    cv::internal::VecWriterProxy<_Tp, DataType<_Tp>::fmt != 0> w(&fs);
     w(vec);
 }
 
@@ -922,63 +954,63 @@ void write( FileStorage& fs, const std::vector<_Tp>& vec )
 template<typename _Tp> static inline
 void write(FileStorage& fs, const String& name, const Point_<_Tp>& pt )
 {
-    internal::WriteStructContext ws(fs, name, FileNode::SEQ+FileNode::FLOW);
+    cv::internal::WriteStructContext ws(fs, name, FileNode::SEQ+FileNode::FLOW);
     write(fs, pt);
 }
 
 template<typename _Tp> static inline
 void write(FileStorage& fs, const String& name, const Point3_<_Tp>& pt )
 {
-    internal::WriteStructContext ws(fs, name, FileNode::SEQ+FileNode::FLOW);
+    cv::internal::WriteStructContext ws(fs, name, FileNode::SEQ+FileNode::FLOW);
     write(fs, pt);
 }
 
 template<typename _Tp> static inline
 void write(FileStorage& fs, const String& name, const Size_<_Tp>& sz )
 {
-    internal::WriteStructContext ws(fs, name, FileNode::SEQ+FileNode::FLOW);
+    cv::internal::WriteStructContext ws(fs, name, FileNode::SEQ+FileNode::FLOW);
     write(fs, sz);
 }
 
 template<typename _Tp> static inline
 void write(FileStorage& fs, const String& name, const Complex<_Tp>& c )
 {
-    internal::WriteStructContext ws(fs, name, FileNode::SEQ+FileNode::FLOW);
+    cv::internal::WriteStructContext ws(fs, name, FileNode::SEQ+FileNode::FLOW);
     write(fs, c);
 }
 
 template<typename _Tp> static inline
 void write(FileStorage& fs, const String& name, const Rect_<_Tp>& r )
 {
-    internal::WriteStructContext ws(fs, name, FileNode::SEQ+FileNode::FLOW);
+    cv::internal::WriteStructContext ws(fs, name, FileNode::SEQ+FileNode::FLOW);
     write(fs, r);
 }
 
 template<typename _Tp, int cn> static inline
 void write(FileStorage& fs, const String& name, const Vec<_Tp, cn>& v )
 {
-    internal::WriteStructContext ws(fs, name, FileNode::SEQ+FileNode::FLOW);
+    cv::internal::WriteStructContext ws(fs, name, FileNode::SEQ+FileNode::FLOW);
     write(fs, v);
 }
 
 template<typename _Tp> static inline
 void write(FileStorage& fs, const String& name, const Scalar_<_Tp>& s )
 {
-    internal::WriteStructContext ws(fs, name, FileNode::SEQ+FileNode::FLOW);
+    cv::internal::WriteStructContext ws(fs, name, FileNode::SEQ+FileNode::FLOW);
     write(fs, s);
 }
 
 static inline
 void write(FileStorage& fs, const String& name, const Range& r )
 {
-    internal::WriteStructContext ws(fs, name, FileNode::SEQ+FileNode::FLOW);
+    cv::internal::WriteStructContext ws(fs, name, FileNode::SEQ+FileNode::FLOW);
     write(fs, r);
 }
 
 template<typename _Tp> static inline
 void write( FileStorage& fs, const String& name, const std::vector<_Tp>& vec )
 {
-    internal::WriteStructContext ws(fs, name, FileNode::SEQ+(DataType<_Tp>::fmt != 0 ? FileNode::FLOW : 0));
+    cv::internal::WriteStructContext ws(fs, name, FileNode::SEQ+(DataType<_Tp>::fmt != 0 ? FileNode::FLOW : 0));
     write(fs, vec);
 }
 
@@ -1030,7 +1062,7 @@ void read(const FileNode& node, short& value, short default_value)
 template<typename _Tp> static inline
 void read( FileNodeIterator& it, std::vector<_Tp>& vec, size_t maxCount = (size_t)INT_MAX )
 {
-    internal::VecReaderProxy<_Tp, DataType<_Tp>::fmt != 0> r(&it);
+    cv::internal::VecReaderProxy<_Tp, DataType<_Tp>::fmt != 0> r(&it);
     r(vec, maxCount);
 }
 
@@ -1101,7 +1133,7 @@ FileNodeIterator& operator >> (FileNodeIterator& it, _Tp& value)
 template<typename _Tp> static inline
 FileNodeIterator& operator >> (FileNodeIterator& it, std::vector<_Tp>& vec)
 {
-    internal::VecReaderProxy<_Tp, DataType<_Tp>::fmt != 0> r(&it);
+    cv::internal::VecReaderProxy<_Tp, DataType<_Tp>::fmt != 0> r(&it);
     r(vec, (size_t)INT_MAX);
     return it;
 }
@@ -1126,6 +1158,23 @@ void operator >> (const FileNode& n, std::vector<_Tp>& vec)
 {
     FileNodeIterator it = n.begin();
     it >> vec;
+}
+
+/** @brief Reads KeyPoint from a file storage.
+*/
+//It needs special handling because it contains two types of fields, int & float.
+static inline
+void operator >> (const FileNode& n, std::vector<KeyPoint>& vec)
+{
+    read(n, vec);
+}
+/** @brief Reads DMatch from a file storage.
+*/
+//It needs special handling because it contains two types of fields, int & float.
+static inline
+void operator >> (const FileNode& n, std::vector<DMatch>& vec)
+{
+    read(n, vec);
 }
 
 //! @} FileNode
@@ -1179,6 +1228,9 @@ inline FileNode::operator int() const    { int value;    read(*this, value, 0); 
 inline FileNode::operator float() const  { float value;  read(*this, value, 0.f);   return value; }
 inline FileNode::operator double() const { double value; read(*this, value, 0.);    return value; }
 inline FileNode::operator String() const { String value; read(*this, value, value); return value; }
+inline double FileNode::real() const  { return double(*this); }
+inline String FileNode::string() const { return String(*this); }
+inline Mat FileNode::mat() const { Mat value; read(*this, value, value);    return value; }
 inline FileNodeIterator FileNode::begin() const { return FileNodeIterator(fs, node); }
 inline FileNodeIterator FileNode::end() const   { return FileNodeIterator(fs, node, size()); }
 inline void FileNode::readRaw( const String& fmt, uchar* vec, size_t len ) const { begin().readRaw( fmt, vec, len ); }
@@ -1187,6 +1239,17 @@ inline FileNode FileNodeIterator::operator ->() const { return FileNode(fs, (con
 inline String::String(const FileNode& fn): cstr_(0), len_(0) { read(fn, *this, *this); }
 
 //! @endcond
+
+
+CV_EXPORTS void cvStartWriteRawData_Base64(::CvFileStorage * fs, const char* name, int len, const char* dt);
+
+CV_EXPORTS void cvWriteRawData_Base64(::CvFileStorage * fs, const void* _data, int len);
+
+CV_EXPORTS void cvEndWriteRawData_Base64(::CvFileStorage * fs);
+
+CV_EXPORTS void cvWriteMat_Base64(::CvFileStorage* fs, const char* name, const ::CvMat* mat);
+
+CV_EXPORTS void cvWriteMatND_Base64(::CvFileStorage* fs, const char* name, const ::CvMatND* mat);
 
 } // cv
 

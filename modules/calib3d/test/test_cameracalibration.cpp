@@ -259,7 +259,7 @@ protected:
     virtual void calibrate( int imageCount, int* pointCounts,
         CvSize imageSize, CvPoint2D64f* imagePoints, CvPoint3D64f* objectPoints,
         double* distortionCoeffs, double* cameraMatrix, double* translationVectors,
-        double* rotationMatrices, int flags ) = 0;
+        double* rotationMatrices, double *stdDevs, double* perViewErrors, int flags ) = 0;
     virtual void project( int pointCount, CvPoint3D64f* objectPoints,
         double* rotationMatrix, double*  translationVector,
         double* cameraMatrix, double* distortion, CvPoint2D64f* imagePoints ) = 0;
@@ -303,9 +303,13 @@ void CV_CameraCalibrationTest::run( int start_from )
 
     double*       transVects;
     double*       rotMatrs;
+    double*       stdDevs;
+    double*       perViewErrors;
 
     double*       goodTransVects;
     double*       goodRotMatrs;
+    double*       goodPerViewErrors;
+    double*       goodStdDevs;
 
     double          cameraMatrix[3*3];
     double          distortion[5]={0,0,0,0,0};
@@ -424,9 +428,13 @@ void CV_CameraCalibrationTest::run( int start_from )
         /* Allocate memory for translate vectors and rotmatrixs*/
         transVects     = (double*)cvAlloc(3 * 1 * numImages * sizeof(double));
         rotMatrs       = (double*)cvAlloc(3 * 3 * numImages * sizeof(double));
+        stdDevs        = (double*)cvAlloc((CV_CALIB_NINTRINSIC + 6*numImages) * sizeof(double));
+        perViewErrors  = (double*)cvAlloc(numImages * sizeof(double));
 
         goodTransVects = (double*)cvAlloc(3 * 1 * numImages * sizeof(double));
         goodRotMatrs   = (double*)cvAlloc(3 * 3 * numImages * sizeof(double));
+        goodPerViewErrors  = (double*)cvAlloc(numImages * sizeof(double));
+        goodStdDevs = (double*)cvAlloc((CV_CALIB_NINTRINSIC + 6*numImages) * sizeof(double));
 
         /* Read object points */
         i = 0;/* shift for current point */
@@ -501,6 +509,13 @@ void CV_CameraCalibrationTest::run( int start_from )
             }
         }
 
+        /* Read good stdDeviations */
+        for (i = 0; i < CV_CALIB_NINTRINSIC + numImages*6; i++)
+        {
+            values_read = fscanf(file, "%lf", goodStdDevs + i);
+            CV_Assert(values_read == 1);
+        }
+
         calibFlags = 0
                      // + CV_CALIB_FIX_PRINCIPAL_POINT
                      // + CV_CALIB_ZERO_TANGENT_DIST
@@ -526,6 +541,8 @@ void CV_CameraCalibrationTest::run( int start_from )
                     cameraMatrix,
                     transVects,
                     rotMatrs,
+                    stdDevs,
+                    perViewErrors,
                     calibFlags );
 
         /* ---- Reproject points to the image ---- */
@@ -553,6 +570,8 @@ void CV_CameraCalibrationTest::run( int start_from )
         meanDy = 0;
         for( currImage = 0; currImage < numImages; currImage++ )
         {
+            double imageMeanDx = 0;
+            double imageMeanDy = 0;
             for( currPoint = 0; currPoint < etalonSize.width * etalonSize.height; currPoint++ )
             {
                 rx = reprojectPoints[i].x;
@@ -562,6 +581,9 @@ void CV_CameraCalibrationTest::run( int start_from )
 
                 meanDx += dx;
                 meanDy += dy;
+
+                imageMeanDx += dx*dx;
+                imageMeanDy += dy*dy;
 
                 dx = fabs(dx);
                 dy = fabs(dy);
@@ -573,6 +595,13 @@ void CV_CameraCalibrationTest::run( int start_from )
                     maxDy = dy;
                 i++;
             }
+            goodPerViewErrors[currImage] = sqrt( (imageMeanDx + imageMeanDy) /
+                                           (etalonSize.width * etalonSize.height));
+
+            //only for c-version of test (it does not provides evaluation of perViewErrors
+            //and returns zeros)
+            if(perViewErrors[currImage] == 0.0)
+                perViewErrors[currImage] = goodPerViewErrors[currImage];
         }
 
         meanDx /= numImages * etalonSize.width * etalonSize.height;
@@ -613,6 +642,23 @@ void CV_CameraCalibrationTest::run( int start_from )
         if( code < 0 )
             goto _exit_;
 
+        /* ----- Compare per view re-projection errors ----- */
+        code = compare(perViewErrors,goodPerViewErrors, numImages,0.1,"per view errors vector");
+        if( code < 0 )
+            goto _exit_;
+
+        /* ----- Compare standard deviations of parameters ----- */
+        //only for c-version of test (it does not provides evaluation of stdDevs
+        //and returns zeros)
+        for ( i = 0; i < CV_CALIB_NINTRINSIC + 6*numImages; i++)
+        {
+            if(stdDevs[i] == 0.0)
+                stdDevs[i] = goodStdDevs[i];
+        }
+        code = compare(stdDevs,goodStdDevs, CV_CALIB_NINTRINSIC + 6*numImages,.5,"stdDevs vector");
+        if( code < 0 )
+            goto _exit_;
+
         if( maxDx > 1.0 )
         {
             ts->printf( cvtest::TS::LOG,
@@ -636,8 +682,12 @@ void CV_CameraCalibrationTest::run( int start_from )
 
         cvFree(&transVects);
         cvFree(&rotMatrs);
+        cvFree(&stdDevs);
+        cvFree(&perViewErrors);
         cvFree(&goodTransVects);
         cvFree(&goodRotMatrs);
+        cvFree(&goodPerViewErrors);
+        cvFree(&goodStdDevs);
 
         fclose(file);
         file = 0;
@@ -676,20 +726,28 @@ protected:
     virtual void calibrate( int imageCount, int* pointCounts,
         CvSize imageSize, CvPoint2D64f* imagePoints, CvPoint3D64f* objectPoints,
         double* distortionCoeffs, double* cameraMatrix, double* translationVectors,
-        double* rotationMatrices, int flags );
+        double* rotationMatrices, double *stdDevs, double* perViewErrors, int flags );
     virtual void project( int pointCount, CvPoint3D64f* objectPoints,
         double* rotationMatrix, double*  translationVector,
         double* cameraMatrix, double* distortion, CvPoint2D64f* imagePoints );
 };
 
-void CV_CameraCalibrationTest_C::calibrate( int imageCount, int* pointCounts,
+void CV_CameraCalibrationTest_C::calibrate(int imageCount, int* pointCounts,
         CvSize imageSize, CvPoint2D64f* imagePoints, CvPoint3D64f* objectPoints,
         double* distortionCoeffs, double* cameraMatrix, double* translationVectors,
-        double* rotationMatrices, int flags )
+        double* rotationMatrices, double *stdDevs, double *perViewErrors, int flags )
 {
     int i, total = 0;
     for( i = 0; i < imageCount; i++ )
+    {
+        perViewErrors[i] = 0.0;
         total += pointCounts[i];
+    }
+
+    for( i = 0; i < CV_CALIB_NINTRINSIC + imageCount*6; i++)
+    {
+        stdDevs[i] = 0.0;
+    }
 
     CvMat _objectPoints = cvMat(1, total, CV_64FC3, objectPoints);
     CvMat _imagePoints = cvMat(1, total, CV_64FC2, imagePoints);
@@ -700,8 +758,7 @@ void CV_CameraCalibrationTest_C::calibrate( int imageCount, int* pointCounts,
     CvMat _translationVectors = cvMat(imageCount, 3, CV_64F, translationVectors);
 
     cvCalibrateCamera2(&_objectPoints, &_imagePoints, &_pointCounts, imageSize,
-                       &_cameraMatrix, &_distCoeffs, &_rotationMatrices, &_translationVectors,
-                       flags);
+                       &_cameraMatrix, &_distCoeffs, &_rotationMatrices, &_translationVectors, flags);
 }
 
 void CV_CameraCalibrationTest_C::project( int pointCount, CvPoint3D64f* objectPoints,
@@ -728,22 +785,24 @@ protected:
     virtual void calibrate( int imageCount, int* pointCounts,
         CvSize imageSize, CvPoint2D64f* imagePoints, CvPoint3D64f* objectPoints,
         double* distortionCoeffs, double* cameraMatrix, double* translationVectors,
-        double* rotationMatrices, int flags );
+        double* rotationMatrices, double *stdDevs, double* perViewErrors,  int flags );
     virtual void project( int pointCount, CvPoint3D64f* objectPoints,
         double* rotationMatrix, double*  translationVector,
         double* cameraMatrix, double* distortion, CvPoint2D64f* imagePoints );
 };
 
-void CV_CameraCalibrationTest_CPP::calibrate( int imageCount, int* pointCounts,
+void CV_CameraCalibrationTest_CPP::calibrate(int imageCount, int* pointCounts,
         CvSize _imageSize, CvPoint2D64f* _imagePoints, CvPoint3D64f* _objectPoints,
         double* _distortionCoeffs, double* _cameraMatrix, double* translationVectors,
-        double* rotationMatrices, int flags )
+        double* rotationMatrices, double *stdDevs, double *perViewErrors, int flags )
 {
     vector<vector<Point3f> > objectPoints( imageCount );
     vector<vector<Point2f> > imagePoints( imageCount );
     Size imageSize = _imageSize;
     Mat cameraMatrix, distCoeffs(1,4,CV_64F,Scalar::all(0));
     vector<Mat> rvecs, tvecs;
+    Mat stdDevsMatInt, stdDevsMatExt;
+    Mat perViewErrorsMat;
 
     CvPoint3D64f* op = _objectPoints;
     CvPoint2D64f* ip = _imagePoints;
@@ -770,7 +829,22 @@ void CV_CameraCalibrationTest_CPP::calibrate( int imageCount, int* pointCounts,
                      distCoeffs,
                      rvecs,
                      tvecs,
+                     stdDevsMatInt,
+                     stdDevsMatExt,
+                     perViewErrorsMat,
                      flags );
+
+    assert( stdDevsMatInt.type() == CV_64F );
+    assert( stdDevsMatInt.total() == static_cast<size_t>(CV_CALIB_NINTRINSIC) );
+    memcpy( stdDevs, stdDevsMatInt.ptr(), CV_CALIB_NINTRINSIC*sizeof(double) );
+
+    assert( stdDevsMatExt.type() == CV_64F );
+    assert( stdDevsMatExt.total() == static_cast<size_t>(6*imageCount) );
+    memcpy( stdDevs + CV_CALIB_NINTRINSIC, stdDevsMatExt.ptr(), 6*imageCount*sizeof(double) );
+
+    assert( perViewErrorsMat.type() == CV_64F);
+    assert( perViewErrorsMat.total() == static_cast<size_t>(imageCount) );
+    memcpy( perViewErrors, perViewErrorsMat.ptr(), imageCount*sizeof(double) );
 
     assert( cameraMatrix.type() == CV_64FC1 );
     memcpy( _cameraMatrix, cameraMatrix.ptr(), 9*sizeof(double) );
@@ -1349,27 +1423,27 @@ bool CV_StereoCalibrationTest::checkPandROI( int test_case_idx, const Mat& M, co
             return false;
         }
 
-        // step 2. check that all the points inside ROI belong to the original source image
-        Mat temp(imgsize, CV_8U), utemp, map1, map2;
-        temp = Scalar::all(1);
-        initUndistortRectifyMap(M, D, R, P, imgsize, CV_16SC2, map1, map2);
-        remap(temp, utemp, map1, map2, INTER_LINEAR);
+    // step 2. check that all the points inside ROI belong to the original source image
+    Mat temp(imgsize, CV_8U), utemp, map1, map2;
+    temp = Scalar::all(1);
+    initUndistortRectifyMap(M, D, R, P, imgsize, CV_16SC2, map1, map2);
+    remap(temp, utemp, map1, map2, INTER_LINEAR);
 
-        if(roi.x < 0 || roi.y < 0 || roi.x + roi.width > imgsize.width || roi.y + roi.height > imgsize.height)
-        {
+    if(roi.x < 0 || roi.y < 0 || roi.x + roi.width > imgsize.width || roi.y + roi.height > imgsize.height)
+    {
             ts->printf(cvtest::TS::LOG, "Test #%d. The ROI=(%d, %d, %d, %d) is outside of the imge rectangle\n",
-                test_case_idx, roi.x, roi.y, roi.width, roi.height);
+                            test_case_idx, roi.x, roi.y, roi.width, roi.height);
             return false;
-        }
-        double s = sum(utemp(roi))[0];
-        if( s > roi.area() || roi.area() - s > roi.area()*(1-eps) )
-        {
+    }
+    double s = sum(utemp(roi))[0];
+    if( s > roi.area() || roi.area() - s > roi.area()*(1-eps) )
+    {
             ts->printf(cvtest::TS::LOG, "Test #%d. The ratio of black pixels inside the valid ROI (~%g%%) is too large\n",
-                test_case_idx, s*100./roi.area());
+                            test_case_idx, s*100./roi.area());
             return false;
-        }
+    }
 
-        return true;
+    return true;
 }
 
 void CV_StereoCalibrationTest::run( int )
@@ -1875,3 +1949,73 @@ TEST(Calib3d_ProjectPoints_C, accuracy) { CV_ProjectPointsTest_C  test; test.saf
 TEST(Calib3d_ProjectPoints_CPP, regression) { CV_ProjectPointsTest_CPP test; test.safe_run(); }
 TEST(Calib3d_StereoCalibrate_C, regression) { CV_StereoCalibrationTest_C test; test.safe_run(); }
 TEST(Calib3d_StereoCalibrate_CPP, regression) { CV_StereoCalibrationTest_CPP test; test.safe_run(); }
+
+
+TEST(Calib3d_Triangulate, accuracy)
+{
+    // the testcase from http://code.opencv.org/issues/4334
+    {
+    double P1data[] = { 250, 0, 200, 0, 0, 250, 150, 0, 0, 0, 1, 0 };
+    double P2data[] = { 250, 0, 200, -250, 0, 250, 150, 0, 0, 0, 1, 0 };
+    Mat P1(3, 4, CV_64F, P1data), P2(3, 4, CV_64F, P2data);
+
+    float x1data[] = { 200.f, 0.f };
+    float x2data[] = { 170.f, 1.f };
+    float Xdata[] = { 0.f, -5.f, 25/3.f };
+    Mat x1(2, 1, CV_32F, x1data);
+    Mat x2(2, 1, CV_32F, x2data);
+    Mat res0(1, 3, CV_32F, Xdata);
+    Mat res_, res;
+
+    triangulatePoints(P1, P2, x1, x2, res_);
+    transpose(res_, res_);
+    convertPointsFromHomogeneous(res_, res);
+    res = res.reshape(1, 1);
+
+    cout << "[1]:" << endl;
+    cout << "\tres0: " << res0 << endl;
+    cout << "\tres: " << res << endl;
+
+    ASSERT_LE(norm(res, res0, NORM_INF), 1e-1);
+    }
+
+    // another testcase http://code.opencv.org/issues/3461
+    {
+    Matx33d K1(6137.147949, 0.000000, 644.974609,
+               0.000000, 6137.147949, 573.442749,
+               0.000000, 0.000000,  1.000000);
+    Matx33d K2(6137.147949,  0.000000, 644.674438,
+               0.000000, 6137.147949, 573.079834,
+               0.000000,  0.000000, 1.000000);
+
+    Matx34d RT1(1, 0, 0, 0,
+                0, 1, 0, 0,
+                0, 0, 1, 0);
+
+    Matx34d RT2(0.998297, 0.0064108, -0.0579766,     143.614334,
+               -0.0065818, 0.999975, -0.00275888,   -5.160085,
+               0.0579574, 0.00313577, 0.998314,     96.066109);
+
+    Matx34d P1 = K1*RT1;
+    Matx34d P2 = K2*RT2;
+
+    float x1data[] = { 438.f, 19.f };
+    float x2data[] = { 452.363600f, 16.452225f };
+    float Xdata[] = { -81.049530f, -215.702804f, 2401.645449f };
+    Mat x1(2, 1, CV_32F, x1data);
+    Mat x2(2, 1, CV_32F, x2data);
+    Mat res0(1, 3, CV_32F, Xdata);
+    Mat res_, res;
+
+    triangulatePoints(P1, P2, x1, x2, res_);
+    transpose(res_, res_);
+    convertPointsFromHomogeneous(res_, res);
+    res = res.reshape(1, 1);
+
+    cout << "[2]:" << endl;
+    cout << "\tres0: " << res0 << endl;
+    cout << "\tres: " << res << endl;
+
+    ASSERT_LE(norm(res, res0, NORM_INF), 2);
+    }
+}

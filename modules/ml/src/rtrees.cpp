@@ -48,21 +48,16 @@ namespace ml {
 //////////////////////////////////////////////////////////////////////////////////////////
 //                                  Random trees                                        //
 //////////////////////////////////////////////////////////////////////////////////////////
-RTrees::Params::Params()
-    : DTrees::Params(5, 10, 0.f, false, 10, 0, false, false, Mat())
+RTreeParams::RTreeParams()
 {
     calcVarImportance = false;
     nactiveVars = 0;
     termCrit = TermCriteria(TermCriteria::EPS + TermCriteria::COUNT, 50, 0.1);
 }
 
-RTrees::Params::Params( int _maxDepth, int _minSampleCount,
-                        double _regressionAccuracy, bool _useSurrogates,
-                        int _maxCategories, const Mat& _priors,
-                        bool _calcVarImportance, int _nactiveVars,
-                        TermCriteria _termCrit )
-    : DTrees::Params(_maxDepth, _minSampleCount, _regressionAccuracy, _useSurrogates,
-                     _maxCategories, 0, false, false, _priors)
+RTreeParams::RTreeParams(bool _calcVarImportance,
+                         int _nactiveVars,
+                         TermCriteria _termCrit )
 {
     calcVarImportance = _calcVarImportance;
     nactiveVars = _nactiveVars;
@@ -73,18 +68,19 @@ RTrees::Params::Params( int _maxDepth, int _minSampleCount,
 class DTreesImplForRTrees : public DTreesImpl
 {
 public:
-    DTreesImplForRTrees() {}
+    DTreesImplForRTrees()
+    {
+        params.setMaxDepth(5);
+        params.setMinSampleCount(10);
+        params.setRegressionAccuracy(0.f);
+        params.useSurrogates = false;
+        params.setMaxCategories(10);
+        params.setCVFolds(0);
+        params.use1SERule = false;
+        params.truncatePrunedTree = false;
+        params.priors = Mat();
+    }
     virtual ~DTreesImplForRTrees() {}
-
-    void setRParams(const RTrees::Params& p)
-    {
-        rparams = p;
-    }
-
-    RTrees::Params getRParams() const
-    {
-        return rparams;
-    }
 
     void clear()
     {
@@ -129,10 +125,6 @@ public:
 
     bool train( const Ptr<TrainData>& trainData, int flags )
     {
-        Params dp(rparams.maxDepth, rparams.minSampleCount, rparams.regressionAccuracy,
-                  rparams.useSurrogates, rparams.maxCategories, rparams.CVFolds,
-                  rparams.use1SERule, rparams.truncatePrunedTree, rparams.priors);
-        setDParams(dp);
         startTraining(trainData, flags);
         int treeidx, ntrees = (rparams.termCrit.type & TermCriteria::COUNT) != 0 ?
             rparams.termCrit.maxCount : 10000;
@@ -195,7 +187,7 @@ public:
                 oobidx.clear();
                 for( i = 0; i < n; i++ )
                 {
-                    if( !oobmask[i] )
+                    if( oobmask[i] )
                         oobidx.push_back(i);
                 }
                 int n_oob = (int)oobidx.size();
@@ -225,6 +217,7 @@ public:
                     else
                     {
                         int ival = cvRound(val);
+                        //Voting scheme to combine OOB errors of each tree
                         int* votes = &oobvotes[j*nclasses];
                         votes[ival]++;
                         int best_class = 0;
@@ -240,38 +233,39 @@ public:
                 oobError /= n_oob;
                 if( rparams.calcVarImportance && n_oob > 1 )
                 {
+                    Mat sample_clone;
                     oobperm.resize(n_oob);
                     for( i = 0; i < n_oob; i++ )
                         oobperm[i] = oobidx[i];
+                    for (i = n_oob - 1; i > 0; --i)  //Randomly shuffle indices so we can permute features
+                    {
+                        int r_i = rng.uniform(0, n_oob);
+                        std::swap(oobperm[i], oobperm[r_i]);
+                    }
 
                     for( vi_ = 0; vi_ < nvars; vi_++ )
                     {
-                        vi = vidx ? vidx[vi_] : vi_;
+                        vi = vidx ? vidx[vi_] : vi_; //Ensure that only the user specified predictors are used for training
                         double ncorrect_responses_permuted = 0;
-                        for( i = 0; i < n_oob; i++ )
-                        {
-                            int i1 = rng.uniform(0, n_oob);
-                            int i2 = rng.uniform(0, n_oob);
-                            std::swap(i1, i2);
-                        }
 
                         for( i = 0; i < n_oob; i++ )
                         {
                             j = oobidx[i];
                             int vj = oobperm[i];
                             sample0 = Mat( nallvars, 1, CV_32F, psamples + sstep0*w->sidx[j], sstep1*sizeof(psamples[0]) );
-                            for( k = 0; k < nallvars; k++ )
-                                sample.at<float>(k) = sample0.at<float>(k);
-                            sample.at<float>(vi) = psamples[sstep0*w->sidx[vj] + sstep1*vi];
+                            sample0.copyTo(sample_clone); //create a copy so we don't mess up the original data
+                            sample_clone.at<float>(vi) = psamples[sstep0*w->sidx[vj] + sstep1*vi];
 
-                            double val = predictTrees(Range(treeidx, treeidx+1), sample, predictFlags);
+                            double val = predictTrees(Range(treeidx, treeidx+1), sample_clone, predictFlags);
                             if( !_isClassifier )
                             {
                                 val = (val - w->ord_responses[w->sidx[j]])/max_response;
                                 ncorrect_responses_permuted += exp( -val*val );
                             }
                             else
+                            {
                                 ncorrect_responses_permuted += cvRound(val) == w->cat_responses[w->sidx[j]];
+                            }
                         }
                         varImportance[vi] += (float)(ncorrect_responses - ncorrect_responses_permuted);
                     }
@@ -302,6 +296,7 @@ public:
         if( roots.empty() )
             CV_Error( CV_StsBadArg, "RTrees have not been trained" );
 
+        writeFormat(fs);
         writeParams(fs);
 
         fs << "oob_error" << oobError;
@@ -326,12 +321,6 @@ public:
     void readParams( const FileNode& fn )
     {
         DTreesImpl::readParams(fn);
-        rparams.maxDepth = params0.maxDepth;
-        rparams.minSampleCount = params0.minSampleCount;
-        rparams.regressionAccuracy = params0.regressionAccuracy;
-        rparams.useSurrogates = params0.useSurrogates;
-        rparams.maxCategories = params0.maxCategories;
-        rparams.priors = params0.priors;
 
         FileNode tparams_node = fn["training_params"];
         rparams.nactiveVars = (int)tparams_node["nactive_vars"];
@@ -361,7 +350,7 @@ public:
         }
     }
 
-    RTrees::Params rparams;
+    RTreeParams rparams;
     double oobError;
     vector<float> varImportance;
     vector<int> allVars, activeVars;
@@ -372,10 +361,24 @@ public:
 class RTreesImpl : public RTrees
 {
 public:
+    CV_IMPL_PROPERTY(bool, CalculateVarImportance, impl.rparams.calcVarImportance)
+    CV_IMPL_PROPERTY(int, ActiveVarCount, impl.rparams.nactiveVars)
+    CV_IMPL_PROPERTY_S(TermCriteria, TermCriteria, impl.rparams.termCrit)
+
+    CV_WRAP_SAME_PROPERTY(int, MaxCategories, impl.params)
+    CV_WRAP_SAME_PROPERTY(int, MaxDepth, impl.params)
+    CV_WRAP_SAME_PROPERTY(int, MinSampleCount, impl.params)
+    CV_WRAP_SAME_PROPERTY(int, CVFolds, impl.params)
+    CV_WRAP_SAME_PROPERTY(bool, UseSurrogates, impl.params)
+    CV_WRAP_SAME_PROPERTY(bool, Use1SERule, impl.params)
+    CV_WRAP_SAME_PROPERTY(bool, TruncatePrunedTree, impl.params)
+    CV_WRAP_SAME_PROPERTY(float, RegressionAccuracy, impl.params)
+    CV_WRAP_SAME_PROPERTY_S(cv::Mat, Priors, impl.params)
+
     RTreesImpl() {}
     virtual ~RTreesImpl() {}
 
-    String getDefaultModelName() const { return "opencv_ml_rtrees"; }
+    String getDefaultName() const { return "opencv_ml_rtrees"; }
 
     bool train( const Ptr<TrainData>& trainData, int flags )
     {
@@ -397,9 +400,6 @@ public:
         impl.read(fn);
     }
 
-    void setRParams(const Params& p) { impl.setRParams(p); }
-    Params getRParams() const { return impl.getRParams(); }
-
     Mat getVarImportance() const { return Mat_<float>(impl.varImportance, true); }
     int getVarCount() const { return impl.getVarCount(); }
 
@@ -415,11 +415,9 @@ public:
 };
 
 
-Ptr<RTrees> RTrees::create(const Params& params)
+Ptr<RTrees> RTrees::create()
 {
-    Ptr<RTreesImpl> p = makePtr<RTreesImpl>();
-    p->setRParams(params);
-    return p;
+    return makePtr<RTreesImpl>();
 }
 
 }}

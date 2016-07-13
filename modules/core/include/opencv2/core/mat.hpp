@@ -163,7 +163,9 @@ public:
         CUDA_HOST_MEM     = 8 << KIND_SHIFT,
         CUDA_GPU_MAT      = 9 << KIND_SHIFT,
         UMAT              =10 << KIND_SHIFT,
-        STD_VECTOR_UMAT   =11 << KIND_SHIFT
+        STD_VECTOR_UMAT   =11 << KIND_SHIFT,
+        STD_BOOL_VECTOR   =12 << KIND_SHIFT,
+        STD_VECTOR_CUDA_GPU_MAT = 13 << KIND_SHIFT
     };
 
     _InputArray();
@@ -173,51 +175,59 @@ public:
     _InputArray(const std::vector<Mat>& vec);
     template<typename _Tp> _InputArray(const Mat_<_Tp>& m);
     template<typename _Tp> _InputArray(const std::vector<_Tp>& vec);
+    _InputArray(const std::vector<bool>& vec);
     template<typename _Tp> _InputArray(const std::vector<std::vector<_Tp> >& vec);
     template<typename _Tp> _InputArray(const std::vector<Mat_<_Tp> >& vec);
     template<typename _Tp> _InputArray(const _Tp* vec, int n);
     template<typename _Tp, int m, int n> _InputArray(const Matx<_Tp, m, n>& matx);
     _InputArray(const double& val);
     _InputArray(const cuda::GpuMat& d_mat);
+    _InputArray(const std::vector<cuda::GpuMat>& d_mat_array);
     _InputArray(const ogl::Buffer& buf);
     _InputArray(const cuda::HostMem& cuda_mem);
     template<typename _Tp> _InputArray(const cudev::GpuMat_<_Tp>& m);
     _InputArray(const UMat& um);
     _InputArray(const std::vector<UMat>& umv);
 
-    virtual Mat getMat(int idx=-1) const;
-    virtual UMat getUMat(int idx=-1) const;
-    virtual void getMatVector(std::vector<Mat>& mv) const;
-    virtual void getUMatVector(std::vector<UMat>& umv) const;
-    virtual cuda::GpuMat getGpuMat() const;
-    virtual ogl::Buffer getOGlBuffer() const;
-    void* getObj() const;
+    Mat getMat(int idx=-1) const;
+    Mat getMat_(int idx=-1) const;
+    UMat getUMat(int idx=-1) const;
+    void getMatVector(std::vector<Mat>& mv) const;
+    void getUMatVector(std::vector<UMat>& umv) const;
+    void getGpuMatVector(std::vector<cuda::GpuMat>& gpumv) const;
+    cuda::GpuMat getGpuMat() const;
+    ogl::Buffer getOGlBuffer() const;
 
-    virtual int kind() const;
-    virtual int dims(int i=-1) const;
-    virtual int cols(int i=-1) const;
-    virtual int rows(int i=-1) const;
-    virtual Size size(int i=-1) const;
-    virtual int sizend(int* sz, int i=-1) const;
-    virtual bool sameSize(const _InputArray& arr) const;
-    virtual size_t total(int i=-1) const;
-    virtual int type(int i=-1) const;
-    virtual int depth(int i=-1) const;
-    virtual int channels(int i=-1) const;
-    virtual bool isContinuous(int i=-1) const;
-    virtual bool isSubmatrix(int i=-1) const;
-    virtual bool empty() const;
-    virtual void copyTo(const _OutputArray& arr) const;
-    virtual void copyTo(const _OutputArray& arr, const _InputArray & mask) const;
-    virtual size_t offset(int i=-1) const;
-    virtual size_t step(int i=-1) const;
+    int getFlags() const;
+    void* getObj() const;
+    Size getSz() const;
+
+    int kind() const;
+    int dims(int i=-1) const;
+    int cols(int i=-1) const;
+    int rows(int i=-1) const;
+    Size size(int i=-1) const;
+    int sizend(int* sz, int i=-1) const;
+    bool sameSize(const _InputArray& arr) const;
+    size_t total(int i=-1) const;
+    int type(int i=-1) const;
+    int depth(int i=-1) const;
+    int channels(int i=-1) const;
+    bool isContinuous(int i=-1) const;
+    bool isSubmatrix(int i=-1) const;
+    bool empty() const;
+    void copyTo(const _OutputArray& arr) const;
+    void copyTo(const _OutputArray& arr, const _InputArray & mask) const;
+    size_t offset(int i=-1) const;
+    size_t step(int i=-1) const;
     bool isMat() const;
     bool isUMat() const;
     bool isMatVector() const;
     bool isUMatVector() const;
     bool isMatx() const;
-
-    virtual ~_InputArray();
+    bool isVector() const;
+    bool isGpuMatVector() const;
+    ~_InputArray();
 
 protected:
     int flags;
@@ -276,10 +286,12 @@ public:
     _OutputArray(Mat& m);
     _OutputArray(std::vector<Mat>& vec);
     _OutputArray(cuda::GpuMat& d_mat);
+    _OutputArray(std::vector<cuda::GpuMat>& d_mat);
     _OutputArray(ogl::Buffer& buf);
     _OutputArray(cuda::HostMem& cuda_mem);
     template<typename _Tp> _OutputArray(cudev::GpuMat_<_Tp>& m);
     template<typename _Tp> _OutputArray(std::vector<_Tp>& vec);
+    _OutputArray(std::vector<bool>& vec);
     template<typename _Tp> _OutputArray(std::vector<std::vector<_Tp> >& vec);
     template<typename _Tp> _OutputArray(std::vector<Mat_<_Tp> >& vec);
     template<typename _Tp> _OutputArray(Mat_<_Tp>& m);
@@ -291,6 +303,7 @@ public:
     _OutputArray(const Mat& m);
     _OutputArray(const std::vector<Mat>& vec);
     _OutputArray(const cuda::GpuMat& d_mat);
+    _OutputArray(const std::vector<cuda::GpuMat>& d_mat);
     _OutputArray(const ogl::Buffer& buf);
     _OutputArray(const cuda::HostMem& cuda_mem);
     template<typename _Tp> _OutputArray(const cudev::GpuMat_<_Tp>& m);
@@ -303,21 +316,22 @@ public:
     _OutputArray(const UMat& m);
     _OutputArray(const std::vector<UMat>& vec);
 
-    virtual bool fixedSize() const;
-    virtual bool fixedType() const;
-    virtual bool needed() const;
-    virtual Mat& getMatRef(int i=-1) const;
-    virtual UMat& getUMatRef(int i=-1) const;
-    virtual cuda::GpuMat& getGpuMatRef() const;
-    virtual ogl::Buffer& getOGlBufferRef() const;
-    virtual cuda::HostMem& getHostMemRef() const;
-    virtual void create(Size sz, int type, int i=-1, bool allowTransposed=false, int fixedDepthMask=0) const;
-    virtual void create(int rows, int cols, int type, int i=-1, bool allowTransposed=false, int fixedDepthMask=0) const;
-    virtual void create(int dims, const int* size, int type, int i=-1, bool allowTransposed=false, int fixedDepthMask=0) const;
-    virtual void createSameSize(const _InputArray& arr, int mtype) const;
-    virtual void release() const;
-    virtual void clear() const;
-    virtual void setTo(const _InputArray& value, const _InputArray & mask = _InputArray()) const;
+    bool fixedSize() const;
+    bool fixedType() const;
+    bool needed() const;
+    Mat& getMatRef(int i=-1) const;
+    UMat& getUMatRef(int i=-1) const;
+    cuda::GpuMat& getGpuMatRef() const;
+    std::vector<cuda::GpuMat>& getGpuMatVecRef() const;
+    ogl::Buffer& getOGlBufferRef() const;
+    cuda::HostMem& getHostMemRef() const;
+    void create(Size sz, int type, int i=-1, bool allowTransposed=false, int fixedDepthMask=0) const;
+    void create(int rows, int cols, int type, int i=-1, bool allowTransposed=false, int fixedDepthMask=0) const;
+    void create(int dims, const int* size, int type, int i=-1, bool allowTransposed=false, int fixedDepthMask=0) const;
+    void createSameSize(const _InputArray& arr, int mtype) const;
+    void release() const;
+    void clear() const;
+    void setTo(const _InputArray& value, const _InputArray & mask = _InputArray()) const;
 
     void assign(const UMat& u) const;
     void assign(const Mat& m) const;
@@ -336,6 +350,7 @@ public:
     _InputOutputArray(cuda::HostMem& cuda_mem);
     template<typename _Tp> _InputOutputArray(cudev::GpuMat_<_Tp>& m);
     template<typename _Tp> _InputOutputArray(std::vector<_Tp>& vec);
+    _InputOutputArray(std::vector<bool>& vec);
     template<typename _Tp> _InputOutputArray(std::vector<std::vector<_Tp> >& vec);
     template<typename _Tp> _InputOutputArray(std::vector<Mat_<_Tp> >& vec);
     template<typename _Tp> _InputOutputArray(Mat_<_Tp>& m);
@@ -347,6 +362,7 @@ public:
     _InputOutputArray(const Mat& m);
     _InputOutputArray(const std::vector<Mat>& vec);
     _InputOutputArray(const cuda::GpuMat& d_mat);
+    _InputOutputArray(const std::vector<cuda::GpuMat>& d_mat);
     _InputOutputArray(const ogl::Buffer& buf);
     _InputOutputArray(const cuda::HostMem& cuda_mem);
     template<typename _Tp> _InputOutputArray(const cudev::GpuMat_<_Tp>& m);
@@ -376,9 +392,10 @@ enum UMatUsageFlags
 {
     USAGE_DEFAULT = 0,
 
-    // default allocation policy is platform and usage specific
+    // buffer allocation policy is platform and usage specific
     USAGE_ALLOCATE_HOST_MEMORY = 1 << 0,
     USAGE_ALLOCATE_DEVICE_MEMORY = 1 << 1,
+    USAGE_ALLOCATE_SHARED_MEMORY = 1 << 2, // It is not equal to: USAGE_ALLOCATE_HOST_MEMORY | USAGE_ALLOCATE_DEVICE_MEMORY
 
     __UMAT_USAGE_FLAGS_32BIT = 0x7fffffff // Binary compatibility hint
 };
@@ -414,7 +431,7 @@ public:
                       const size_t dstofs[], const size_t dststep[], bool sync) const;
 
     // default implementation returns DummyBufferPoolController
-    virtual BufferPoolController* getBufferPoolController() const;
+    virtual BufferPoolController* getBufferPoolController(const char* id = NULL) const;
 };
 
 
@@ -480,12 +497,14 @@ struct CV_EXPORTS UMatData
     int refcount;
     uchar* data;
     uchar* origdata;
-    size_t size, capacity;
+    size_t size;
 
     int flags;
     void* handle;
     void* userdata;
     int allocatorFlags_;
+    int mapcount;
+    UMatData* originalUMatData;
 };
 
 
@@ -1061,6 +1080,7 @@ public:
     @param m Destination matrix. If it does not have a proper size or type before the operation, it is
     reallocated.
     @param mask Operation mask. Its non-zero elements indicate which matrix elements need to be copied.
+    The mask has to be of type CV_8U and can have 1 or multiple channels.
     */
     void copyTo( OutputArray m, InputArray mask ) const;
 
@@ -1682,6 +1702,17 @@ public:
             for(int j = 0; j < H.cols; j++)
                 H.at<double>(i,j)=1./(i+j+1);
     @endcode
+
+    Keep in mind that the size identifier used in the at operator cannot be chosen at random. It depends
+    on the image from which you are trying to retrieve the data. The table below gives a better insight in this:
+     - If matrix is of type `CV_8U` then use `Mat.at<uchar>(y,x)`.
+     - If matrix is of type `CV_8S` then use `Mat.at<schar>(y,x)`.
+     - If matrix is of type `CV_16U` then use `Mat.at<ushort>(y,x)`.
+     - If matrix is of type `CV_16S` then use `Mat.at<short>(y,x)`.
+     - If matrix is of type `CV_32S`  then use `Mat.at<int>(y,x)`.
+     - If matrix is of type `CV_32F`  then use `Mat.at<float>(y,x)`.
+     - If matrix is of type `CV_64F` then use `Mat.at<double>(y,x)`.
+
     @param i0 Index along the dimension 0
      */
     template<typename _Tp> _Tp& at(int i0=0);
@@ -1785,12 +1816,11 @@ public:
     template<typename _Tp> MatIterator_<_Tp> end();
     template<typename _Tp> MatConstIterator_<_Tp> end() const;
 
-    /** @brief Invoke with arguments functor, and runs the functor over all matrix element.
+    /** @brief Runs the given functor over all matrix elements in parallel.
 
-    The methos runs operation in parallel. Operation is passed by arguments. Operation have to be a
-    function pointer, a function object or a lambda(C++11).
+    The operation passed as argument has to be a function pointer, a function object or a lambda(C++11).
 
-    All of below operation is equal. Put 0xFF to first channel of all matrix elements:
+    Example 1. All of the operations below put 0xFF the first channel of all matrix elements:
     @code
         Mat image(1920, 1080, CV_8UC3);
         typedef cv::Point3_<uint8_t> Pixel;
@@ -1822,18 +1852,18 @@ public:
             p.x = 255;
         });
     @endcode
-    position parameter is index of current pixel:
+    Example 2. Using the pixel's position:
     @code
-        // Creating 3D matrix (255 x 255 x 255) typed uint8_t,
-        //  and initialize all elements by the value which equals elements position.
-        //  i.e. pixels (x,y,z) = (1,2,3) is (b,g,r) = (1,2,3).
+        // Creating 3D matrix (255 x 255 x 255) typed uint8_t
+        // and initialize all elements by the value which equals elements position.
+        // i.e. pixels (x,y,z) = (1,2,3) is (b,g,r) = (1,2,3).
 
         int sizes[] = { 255, 255, 255 };
         typedef cv::Point3_<uint8_t> Pixel;
 
         Mat_<Pixel> image = Mat::zeros(3, sizes, CV_8UC3);
 
-        image.forEachWithPosition([&](Pixel& pixel, const int position[]) -> void{
+        image.forEach<Pixel>([&](Pixel& pixel, const int position[]) -> void {
             pixel.x = position[0];
             pixel.y = position[1];
             pixel.z = position[2];
@@ -1843,6 +1873,11 @@ public:
     template<typename _Tp, typename Functor> void forEach(const Functor& operation);
     /** @overload */
     template<typename _Tp, typename Functor> void forEach(const Functor& operation) const;
+
+#ifdef CV_CXX_MOVE_SEMANTICS
+    Mat(Mat&& m);
+    Mat& operator = (Mat&& m);
+#endif
 
     enum { MAGIC_VAL  = 0x42FF0000, AUTO_STEP = 0, CONTINUOUS_FLAG = CV_MAT_CONT_FLAG, SUBMATRIX_FLAG = CV_SUBMAT_FLAG };
     enum { MAGIC_MASK = 0xFFFF0000, TYPE_MASK = 0x00000FFF, DEPTH_MASK = 7 };
@@ -1870,6 +1905,8 @@ public:
     MatAllocator* allocator;
     //! and the standard allocator
     static MatAllocator* getStdAllocator();
+    static MatAllocator* getDefaultAllocator();
+    static void setDefaultAllocator(MatAllocator* allocator);
 
     //! interaction with UMat
     UMatData* u;
@@ -2074,6 +2111,16 @@ public:
     template<int n> operator Vec<typename DataType<_Tp>::channel_type, n>() const;
     //! conversion to Matx
     template<int m, int n> operator Matx<typename DataType<_Tp>::channel_type, m, n>() const;
+
+#ifdef CV_CXX_MOVE_SEMANTICS
+    Mat_(Mat_&& m);
+    Mat_& operator = (Mat_&& m);
+
+    Mat_(Mat&& m);
+    Mat_& operator = (Mat&& m);
+
+    Mat_(MatExpr&& e);
+#endif
 };
 
 typedef Mat_<uchar> Mat1b;
@@ -2266,6 +2313,11 @@ public:
     //! returns N if the matrix is 1-channel (N x ptdim) or ptdim-channel (1 x N) or (N x 1); negative number otherwise
     int checkVector(int elemChannels, int depth=-1, bool requireContinuous=true) const;
 
+#ifdef CV_CXX_MOVE_SEMANTICS
+    UMat(UMat&& m);
+    UMat& operator = (UMat&& m);
+#endif
+
     void* handle(int accessFlags) const;
     void ndoffset(size_t* ofs) const;
 
@@ -2317,15 +2369,16 @@ Elements can be accessed using the following methods:
     SparseMat::find), for example:
     @code
         const int dims = 5;
-        int size[] = {10, 10, 10, 10, 10};
+        int size[5] = {10, 10, 10, 10, 10};
         SparseMat sparse_mat(dims, size, CV_32F);
         for(int i = 0; i < 1000; i++)
         {
             int idx[dims];
             for(int k = 0; k < dims; k++)
-                idx[k] = rand()
+                idx[k] = rand() % size[k];
             sparse_mat.ref<float>(idx) += 1.f;
         }
+        cout << "nnz = " << sparse_mat.nzcount() << endl;
     @endcode
 -   Sparse matrix iterators. They are similar to MatIterator but different from NAryMatIterator.
     That is, the iteration loop is familiar to STL users:
@@ -2827,9 +2880,9 @@ public:
     //! copy operator
     MatConstIterator_& operator = (const MatConstIterator_& it);
     //! returns the current matrix element
-    _Tp operator *() const;
+    const _Tp& operator *() const;
     //! returns the i-th matrix element, relative to the current
-    _Tp operator [](ptrdiff_t i) const;
+    const _Tp& operator [](ptrdiff_t i) const;
 
     //! shifts the iterator forward by the specified number of elements
     MatConstIterator_& operator += (ptrdiff_t ofs);
@@ -3231,7 +3284,7 @@ Here are examples of matrix expressions:
     // sharpen image using "unsharp mask" algorithm
     Mat blurred; double sigma = 1, threshold = 5, amount = 1;
     GaussianBlur(img, blurred, Size(), sigma, sigma);
-    Mat lowConstrastMask = abs(img - blurred) < threshold;
+    Mat lowContrastMask = abs(img - blurred) < threshold;
     Mat sharpened = img*(1+amount) + blurred*(-amount);
     img.copyTo(sharpened, lowContrastMask);
 @endcode
