@@ -9,18 +9,18 @@ RUN apt-get install -y unzip wget build-essential \
     libavcodec-dev libavformat-dev libswscale-dev libv4l-dev opencl-dev xvfb \
     vim
 		
-RUN cd && wget -Nc http://ffmpeg.org/releases/ffmpeg-2.8.6.tar.bz2 \
-    && bzip2 -d ffmpeg-2.8.6.tar.bz2 && tar -xvf ffmpeg-2.8.6.tar \
-    && cd ffmpeg-2.8.6/ && ./configure --enable-avresample --enable-pic \
+RUN cd && wget -Nc http://ffmpeg.org/releases/ffmpeg-3.1.1.tar.bz2 \
+    && bzip2 -d ffmpeg-3.1.1.tar.bz2 && tar -xvf ffmpeg-3.1.1.tar \
+    && cd ffmpeg-3.1.1/ && ./configure --enable-avresample --enable-pic \
     --disable-doc --disable-static --enable-shared --enable-gpl \ 
     --enable-nonfree --enable-postproc --disable-yasm \
     && make && sudo make install \
-    && cd && rm -rf ffmpeg-2.8.6 && rm ffmpeg-2.8.6.tar
+    && cd && rm -rf ffmpeg-3.1.1 && rm ffmpeg-3.1.1.tar
 
 RUN cd && wget https://github.com/SoheilSalehian/opencv/archive/memory-snapshots.zip \ 
 	&& unzip memory-snapshots.zip \
 	&& cd opencv-memory-snapshots && mkdir build && cd build \
-	&& cmake -D WITH_FFMPEG=ON -D ENABLE_MEMORY_SNAPSHOTS=YES .. && make -j2 && make install \
+	&& cmake -D WITH_FFMPEG=OFF -D ENABLE_MEMORY_SNAPSHOTS=YES -D BUILD_SHARED_LIBS=OFF -D USE_IPP=ON .. && make -j2 && make install \
 	&& cd && rm -rf opencv-memory-snapshots && rm memory-snapshots.zip
 
 # TODO: Add these as part of the container setup
