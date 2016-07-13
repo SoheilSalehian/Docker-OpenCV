@@ -86,7 +86,7 @@ using namespace cv;
 
 namespace {
 
-class OpticalFlowDual_TVL1 : public DenseOpticalFlow
+class OpticalFlowDual_TVL1 : public DualTVL1OpticalFlow
 {
 public:
     OpticalFlowDual_TVL1();
@@ -94,7 +94,18 @@ public:
     void calc(InputArray I0, InputArray I1, InputOutputArray flow);
     void collectGarbage();
 
-    AlgorithmInfo* info() const;
+    CV_IMPL_PROPERTY(double, Tau, tau)
+    CV_IMPL_PROPERTY(double, Lambda, lambda)
+    CV_IMPL_PROPERTY(double, Theta, theta)
+    CV_IMPL_PROPERTY(double, Gamma, gamma)
+    CV_IMPL_PROPERTY(int, ScalesNumber, nscales)
+    CV_IMPL_PROPERTY(int, WarpingsNumber, warps)
+    CV_IMPL_PROPERTY(double, Epsilon, epsilon)
+    CV_IMPL_PROPERTY(int, InnerIterations, innerIterations)
+    CV_IMPL_PROPERTY(int, OuterIterations, outerIterations)
+    CV_IMPL_PROPERTY(bool, UseInitialFlow, useInitialFlow)
+    CV_IMPL_PROPERTY(double, ScaleStep, scaleStep)
+    CV_IMPL_PROPERTY(int, MedianFiltering, medianFiltering)
 
 protected:
     double tau;
@@ -111,11 +122,13 @@ protected:
     int medianFiltering;
 
 private:
-   void procOneScale(const Mat_<float>& I0, const Mat_<float>& I1, Mat_<float>& u1, Mat_<float>& u2, Mat_<float>& u3);
+    void procOneScale(const Mat_<float>& I0, const Mat_<float>& I1, Mat_<float>& u1, Mat_<float>& u2, Mat_<float>& u3);
 
+#ifdef HAVE_OPENCL
     bool procOneScale_ocl(const UMat& I0, const UMat& I1, UMat& u1, UMat& u2);
 
     bool calc_ocl(InputArray I0, InputArray I1, InputOutputArray flow);
+#endif
     struct dataMat
     {
         std::vector<Mat_<float> > I0s;
@@ -159,6 +172,8 @@ private:
         Mat_<float> u3x_buf;
         Mat_<float> u3y_buf;
     } dm;
+
+#ifdef HAVE_OPENCL
     struct dataUMat
     {
         std::vector<UMat> I0s;
@@ -184,8 +199,10 @@ private:
         UMat diff_buf;
         UMat norm_buf;
     } dum;
+#endif
 };
 
+#ifdef HAVE_OPENCL
 namespace cv_ocl_tvl1flow
 {
     bool centeredGradient(const UMat &src, UMat &dx, UMat &dy);
@@ -205,7 +222,7 @@ namespace cv_ocl_tvl1flow
 
 bool cv_ocl_tvl1flow::centeredGradient(const UMat &src, UMat &dx, UMat &dy)
 {
-    size_t globalsize[2] = { src.cols, src.rows };
+    size_t globalsize[2] = { (size_t)src.cols, (size_t)src.rows };
 
     ocl::Kernel kernel;
     if (!kernel.create("centeredGradientKernel", cv::ocl::video::optical_flow_tvl1_oclsrc, ""))
@@ -226,7 +243,7 @@ bool cv_ocl_tvl1flow::warpBackward(const UMat &I0, const UMat &I1, UMat &I1x, UM
     UMat &u1, UMat &u2, UMat &I1w, UMat &I1wx, UMat &I1wy,
     UMat &grad, UMat &rho)
 {
-    size_t globalsize[2] = { I0.cols, I0.rows };
+    size_t globalsize[2] = { (size_t)I0.cols, (size_t)I0.rows };
 
     ocl::Kernel kernel;
     if (!kernel.create("warpBackwardKernel", cv::ocl::video::optical_flow_tvl1_oclsrc, ""))
@@ -270,7 +287,7 @@ bool cv_ocl_tvl1flow::estimateU(UMat &I1wx, UMat &I1wy, UMat &grad,
     UMat &p21, UMat &p22, UMat &u1,
     UMat &u2, UMat &error, float l_t, float theta, char calc_error)
 {
-    size_t globalsize[2] = { I1wx.cols, I1wx.rows };
+    size_t globalsize[2] = { (size_t)I1wx.cols, (size_t)I1wx.rows };
 
     ocl::Kernel kernel;
     if (!kernel.create("estimateUKernel", cv::ocl::video::optical_flow_tvl1_oclsrc, ""))
@@ -311,7 +328,7 @@ bool cv_ocl_tvl1flow::estimateU(UMat &I1wx, UMat &I1wy, UMat &grad,
 bool cv_ocl_tvl1flow::estimateDualVariables(UMat &u1, UMat &u2,
     UMat &p11, UMat &p12, UMat &p21, UMat &p22, float taut)
 {
-    size_t globalsize[2] = { u1.cols, u1.rows };
+    size_t globalsize[2] = { (size_t)u1.cols, (size_t)u1.rows };
 
     ocl::Kernel kernel;
     if (!kernel.create("estimateDualVariablesKernel", cv::ocl::video::optical_flow_tvl1_oclsrc, ""))
@@ -342,6 +359,7 @@ bool cv_ocl_tvl1flow::estimateDualVariables(UMat &u1, UMat &u2,
     return kernel.run(2, globalsize, NULL, false);
 
 }
+#endif
 
 OpticalFlowDual_TVL1::OpticalFlowDual_TVL1()
 {
@@ -488,6 +506,7 @@ void OpticalFlowDual_TVL1::calc(InputArray _I0, InputArray _I1, InputOutputArray
     merge(uxy, 2, _flow);
 }
 
+#ifdef HAVE_OPENCL
 bool OpticalFlowDual_TVL1::calc_ocl(InputArray _I0, InputArray _I1, InputOutputArray _flow)
 {
     UMat I0 = _I0.getUMat();
@@ -587,6 +606,7 @@ bool OpticalFlowDual_TVL1::calc_ocl(InputArray _I0, InputArray _I1, InputOutputA
     merge(uxy, _flow);
     return true;
 }
+#endif
 
 ////////////////////////////////////////////////////////////
 // buildFlowMap
@@ -1113,18 +1133,22 @@ void EstimateDualVariablesBody::operator() (const Range& range) const
         {
             const float g1 = static_cast<float>(hypot(u1xRow[x], u1yRow[x]));
             const float g2 = static_cast<float>(hypot(u2xRow[x], u2yRow[x]));
-            const float g3 = static_cast<float>(hypot(u3xRow[x], u3yRow[x]));
 
             const float ng1  = 1.0f + taut * g1;
             const float ng2 =  1.0f + taut * g2;
-            const float ng3 = 1.0f + taut * g3;
 
             p11Row[x] = (p11Row[x] + taut * u1xRow[x]) / ng1;
             p12Row[x] = (p12Row[x] + taut * u1yRow[x]) / ng1;
             p21Row[x] = (p21Row[x] + taut * u2xRow[x]) / ng2;
             p22Row[x] = (p22Row[x] + taut * u2yRow[x]) / ng2;
-            if (use_gamma) p31Row[x] = (p31Row[x] + taut * u3xRow[x]) / ng3;
-            if (use_gamma) p32Row[x] = (p32Row[x] + taut * u3yRow[x]) / ng3;
+
+            if (use_gamma)
+            {
+                const float g3 = static_cast<float>(hypot(u3xRow[x], u3yRow[x]));
+                const float ng3 = 1.0f + taut * g3;
+                p31Row[x] = (p31Row[x] + taut * u3xRow[x]) / ng3;
+                p32Row[x] = (p32Row[x] + taut * u3yRow[x]) / ng3;
+            }
         }
     }
 }
@@ -1169,6 +1193,7 @@ void estimateDualVariables(const Mat_<float>& u1x, const Mat_<float>& u1y,
     parallel_for_(Range(0, u1x.rows), body);
 }
 
+#ifdef HAVE_OPENCL
 bool OpticalFlowDual_TVL1::procOneScale_ocl(const UMat& I0, const UMat& I1, UMat& u1, UMat& u2)
 {
     using namespace cv_ocl_tvl1flow;
@@ -1256,6 +1281,7 @@ bool OpticalFlowDual_TVL1::procOneScale_ocl(const UMat& I0, const UMat& I1, UMat
     }
     return true;
 }
+#endif
 
 void OpticalFlowDual_TVL1::procOneScale(const Mat_<float>& I0, const Mat_<float>& I1, Mat_<float>& u1, Mat_<float>& u2, Mat_<float>& u3)
 {
@@ -1391,6 +1417,7 @@ void OpticalFlowDual_TVL1::collectGarbage()
     dm.u2x_buf.release();
     dm.u2y_buf.release();
 
+#ifdef HAVE_OPENCL
     //dataUMat structure dum
     dum.I0s.clear();
     dum.I1s.clear();
@@ -1414,37 +1441,12 @@ void OpticalFlowDual_TVL1::collectGarbage()
 
     dum.diff_buf.release();
     dum.norm_buf.release();
+#endif
 }
-
-
-CV_INIT_ALGORITHM(OpticalFlowDual_TVL1, "DenseOpticalFlow.DualTVL1",
-                  obj.info()->addParam(obj, "tau", obj.tau, false, 0, 0,
-                                       "Time step of the numerical scheme");
-                  obj.info()->addParam(obj, "lambda", obj.lambda, false, 0, 0,
-                                       "Weight parameter for the data term, attachment parameter");
-                  obj.info()->addParam(obj, "theta", obj.theta, false, 0, 0,
-                                       "Weight parameter for (u - v)^2, tightness parameter");
-                  obj.info()->addParam(obj, "nscales", obj.nscales, false, 0, 0,
-                                       "Number of scales used to create the pyramid of images");
-                  obj.info()->addParam(obj, "warps", obj.warps, false, 0, 0,
-                                       "Number of warpings per scale");
-                  obj.info()->addParam(obj, "medianFiltering", obj.medianFiltering, false, 0, 0,
-                                       "Median filter kernel size (1 = no filter) (3 or 5)");
-                  obj.info()->addParam(obj, "scaleStep", obj.scaleStep, false, 0, 0,
-                                       "Step between scales (<1)");
-                  obj.info()->addParam(obj, "epsilon", obj.epsilon, false, 0, 0,
-                                       "Stopping criterion threshold used in the numerical scheme, which is a trade-off between precision and running time");
-                  obj.info()->addParam(obj, "innerIterations", obj.innerIterations, false, 0, 0,
-                                       "inner iterations (between outlier filtering) used in the numerical scheme");
-                  obj.info()->addParam(obj, "outerIterations", obj.outerIterations, false, 0, 0,
-                                       "outer iterations (number of inner loops) used in the numerical scheme");
-                  obj.info()->addParam(obj, "gamma", obj.gamma, false, 0, 0,
-                                       "coefficient for additional illumination variation term");
-                  obj.info()->addParam(obj, "useInitialFlow", obj.useInitialFlow))
 
 } // namespace
 
-Ptr<DenseOpticalFlow> cv::createOptFlow_DualTVL1()
+Ptr<DualTVL1OpticalFlow> cv::createOptFlow_DualTVL1()
 {
     return makePtr<OpticalFlowDual_TVL1>();
 }

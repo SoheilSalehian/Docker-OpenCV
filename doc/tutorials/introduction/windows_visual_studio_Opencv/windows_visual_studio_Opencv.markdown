@@ -71,9 +71,9 @@ application. In contrast the *Release* is an optimized version, where the goal i
 application run as fast as possible or to be as small as possible. You may figure that these modes
 also require different rules to use during build. Therefore, there exist different rule packages for
 each of your build modes. These rule packages are called inside the IDE as *project properties* and
-you can view and modify them by using the *Property Manger*. You can bring up this with
-View --\> Property Pages. Expand it and you can see the existing rule packages (called *Proporty
-Sheets*).
+you can view and modify them by using the *Property Manager*. You can bring this up with
+View --\> Property Pages (For Visual Studio 2013 onwards, go to View --\> Other Windows --\> Property Manager).
+Expand it and you can see the existing rule packages (called *Property Sheets*).
 
 ![](images/PropertyPageExample.jpg)
 
@@ -193,7 +193,7 @@ Now to try this out download our little test [source code
 or get it from the sample code folder of the OpenCV sources. Add this to your project and build it.
 Here's its content:
 
-@includelineno cpp/tutorial_code/introduction/windows_visual_studio_Opencv/introduction_windows_vs.cpp
+@include cpp/tutorial_code/introduction/windows_visual_studio_Opencv/introduction_windows_vs.cpp
 
 You can start a Visual Studio build from two places. Either inside from the *IDE* (keyboard
 combination: Control-F5) or by navigating to your build directory and start the application with a

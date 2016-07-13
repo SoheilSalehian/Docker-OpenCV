@@ -1,4 +1,4 @@
-﻿/*M///////////////////////////////////////////////////////////////////////////////////////
+/*M///////////////////////////////////////////////////////////////////////////////////////
 //
 //  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
 //
@@ -90,16 +90,13 @@ HoughLinesStandard( const Mat& img, float rho, float theta,
     int width = img.cols;
     int height = img.rows;
 
-    if (max_theta < 0 || max_theta > CV_PI ) {
-        CV_Error( CV_StsBadArg, "max_theta must fall between 0 and pi" );
-    }
-    if (min_theta < 0 || min_theta > max_theta ) {
-        CV_Error( CV_StsBadArg, "min_theta must fall between 0 and max_theta" );
+    if (max_theta < min_theta ) {
+        CV_Error( CV_StsBadArg, "max_theta must be greater than min_theta" );
     }
     int numangle = cvRound((max_theta - min_theta) / theta);
     int numrho = cvRound(((width + height) * 2 + 1) / rho);
 
-#if (0 && defined(HAVE_IPP) && !defined(HAVE_IPP_ICV_ONLY) && IPP_VERSION_X100 >= 801)
+#if defined HAVE_IPP && !defined(HAVE_IPP_ICV_ONLY) && IPP_VERSION_X100 >= 810 && IPP_DISABLE_BLOCK
     CV_IPP_CHECK()
     {
         IppiSize srcSize = { width, height };
@@ -178,7 +175,7 @@ HoughLinesStandard( const Mat& img, float rho, float theta,
         int n = cvFloor(idx*scale) - 1;
         int r = idx - (n+1)*(numrho+2) - 1;
         line.rho = (r - (numrho - 1)*0.5f) * rho;
-        line.angle = n * theta;
+        line.angle = static_cast<float>(min_theta) + n * theta;
         lines.push_back(Vec2f(line.rho, line.angle));
     }
 }
@@ -432,7 +429,7 @@ HoughLinesProbabilistic( Mat& image,
     int numangle = cvRound(CV_PI / theta);
     int numrho = cvRound(((width + height) * 2 + 1) / rho);
 
-#if (0 && defined(HAVE_IPP) && !defined(HAVE_IPP_ICV_ONLY) && IPP_VERSION_X100 >= 801)
+#if defined HAVE_IPP && !defined(HAVE_IPP_ICV_ONLY) && IPP_VERSION_X100 >= 810 && IPP_DISABLE_BLOCK
     CV_IPP_CHECK()
     {
         IppiSize srcSize = { width, height };
@@ -683,8 +680,8 @@ static bool ocl_makePointsList(InputArray _src, OutputArray _pointsList, InputOu
     pointListKernel.args(ocl::KernelArg::ReadOnly(src), ocl::KernelArg::WriteOnlyNoSize(pointsList),
                          ocl::KernelArg::PtrWriteOnly(counters));
 
-    size_t localThreads[2]  = { workgroup_size, 1 };
-    size_t globalThreads[2] = { workgroup_size, src.rows };
+    size_t localThreads[2]  = { (size_t)workgroup_size, 1 };
+    size_t globalThreads[2] = { (size_t)workgroup_size, (size_t)src.rows };
 
     return pointListKernel.run(2, globalThreads, localThreads, false);
 }
@@ -778,7 +775,7 @@ static bool ocl_HoughLines(InputArray _src, OutputArray _lines, double rho, doub
     getLinesKernel.args(ocl::KernelArg::ReadOnly(accum), ocl::KernelArg::WriteOnlyNoSize(lines),
                         ocl::KernelArg::PtrWriteOnly(counters), linesMax, threshold, (float) rho, (float) theta);
 
-    size_t globalThreads[2] = { (numrho + pixPerWI - 1)/pixPerWI, numangle };
+    size_t globalThreads[2] = { ((size_t)numrho + pixPerWI - 1)/pixPerWI, (size_t)numangle };
     if (!getLinesKernel.run(2, globalThreads, NULL, false))
         return false;
 
@@ -832,7 +829,7 @@ static bool ocl_HoughLinesP(InputArray _src, OutputArray _lines, double rho, dou
                         ocl::KernelArg::WriteOnlyNoSize(lines), ocl::KernelArg::PtrWriteOnly(counters),
                         linesMax, threshold, (int) minLineLength, (int) maxGap, (float) rho, (float) theta);
 
-    size_t globalThreads[2] = { numrho, numangle };
+    size_t globalThreads[2] = { (size_t)numrho, (size_t)numangle };
     if (!getLinesKernel.run(2, globalThreads, NULL, false))
         return false;
 

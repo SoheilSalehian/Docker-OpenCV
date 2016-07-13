@@ -117,7 +117,7 @@ CV_IMPL void cvAddText(const CvArr* img, const char* text, CvPoint org, CvFont* 
         "putText",
         autoBlockingConnection(),
         Q_ARG(void*, (void*) img),
-        Q_ARG(QString,QString(text)),
+        Q_ARG(QString,QString::fromUtf8(text)),
         Q_ARG(QPoint, QPoint(org.x,org.y)),
         Q_ARG(void*,(void*) font));
 }
@@ -418,12 +418,14 @@ static CvBar* icvFindBarByName(QBoxLayout* layout, QString name_bar, typeBar typ
 static CvTrackbar* icvFindTrackBarByName(const char* name_trackbar, const char* name_window, QBoxLayout* layout = NULL)
 {
     QString nameQt(name_trackbar);
-    if ((!name_window || !name_window[0]) && global_control_panel) //window name is null and we have a control panel
+    QString nameWinQt(name_window);
+
+    if (nameWinQt.isEmpty() && global_control_panel) //window name is null and we have a control panel
         layout = global_control_panel->myLayout;
 
     if (!layout)
     {
-        QPointer<CvWindow> w = icvFindWindowByName(QLatin1String(name_window));
+        QPointer<CvWindow> w = icvFindWindowByName(nameWinQt);
 
         if (!w)
             CV_Error(CV_StsNullPtr, "NULL window handler");
@@ -464,6 +466,7 @@ static int icvInitSystem(int* c, char** v)
     if (!QApplication::instance())
     {
         new QApplication(*c, v);
+        setlocale(LC_NUMERIC,"C");
 
         qDebug() << "init done";
 
@@ -661,7 +664,24 @@ CV_IMPL void cvSetTrackbarMax(const char* name_bar, const char* window_name, int
         QPointer<CvTrackbar> t = icvFindTrackBarByName(name_bar, window_name);
         if (t)
         {
+            int minval = t->slider->minimum();
+            maxval = (maxval>minval)?maxval:minval;
             t->slider->setMaximum(maxval);
+        }
+    }
+}
+
+
+CV_IMPL void cvSetTrackbarMin(const char* name_bar, const char* window_name, int minval)
+{
+    if (minval >= 0)
+    {
+        QPointer<CvTrackbar> t = icvFindTrackBarByName(name_bar, window_name);
+        if (t)
+        {
+            int maxval = t->slider->maximum();
+            minval = (maxval<minval)?maxval:minval;
+            t->slider->setMinimum(minval);
         }
     }
 }
@@ -1874,7 +1894,7 @@ bool CvWindow::isOpenGl()
 
 void CvWindow::setViewportSize(QSize _size)
 {
-    myView->getWidget()->resize(_size);
+    resize(_size);
     myView->setSize(_size);
 }
 
@@ -2588,6 +2608,7 @@ void DefaultViewPort::resizeEvent(QResizeEvent* evnt)
         if (fabs(ratioX - ratioY) * 100 > ratioX) //avoid infinity loop / epsilon = 1% of ratioX
         {
             resize(newSize);
+            viewport()->resize(newSize);
 
             //move to the middle
             //newSize get the delta offset to place the picture in the middle of its parent

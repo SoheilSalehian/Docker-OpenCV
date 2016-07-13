@@ -56,7 +56,7 @@ Stitcher Stitcher::createDefault(bool try_use_gpu)
     stitcher.setFeaturesMatcher(makePtr<detail::BestOf2NearestMatcher>(try_use_gpu));
     stitcher.setBundleAdjuster(makePtr<detail::BundleAdjusterRay>());
 
-#ifdef HAVE_OPENCV_CUDA
+#ifdef HAVE_CUDA
     if (try_use_gpu && cuda::getCudaEnabledDeviceCount() > 0)
     {
 #ifdef HAVE_OPENCV_XFEATURES2D
@@ -81,6 +81,11 @@ Stitcher Stitcher::createDefault(bool try_use_gpu)
 
     stitcher.setExposureCompensator(makePtr<detail::BlocksGainCompensator>());
     stitcher.setBlender(makePtr<detail::MultiBandBlender>(try_use_gpu));
+
+    stitcher.work_scale_ = 1;
+    stitcher.seam_scale_ = 1;
+    stitcher.seam_work_aspect_ = 1;
+    stitcher.warped_image_scale_ = 1;
 
     return stitcher;
 }
@@ -544,7 +549,7 @@ Ptr<Stitcher> createStitcher(bool try_use_gpu)
     stitcher->setFeaturesMatcher(makePtr<detail::BestOf2NearestMatcher>(try_use_gpu));
     stitcher->setBundleAdjuster(makePtr<detail::BundleAdjusterRay>());
 
-    #ifdef HAVE_OPENCV_CUDA
+    #ifdef HAVE_CUDA
     if (try_use_gpu && cuda::getCudaEnabledDeviceCount() > 0)
     {
         #ifdef HAVE_OPENCV_NONFREE
